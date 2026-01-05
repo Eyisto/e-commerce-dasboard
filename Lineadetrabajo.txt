@@ -1,0 +1,471 @@
+1) Introducción y objetivos
+Introducción
+
+Construiremos una eCommerce “tipo marketplace” (inspirada en Olist) con un dashboard de métricas alimentado por datos históricos reales: ~100k órdenes (2016–2018) con información de clientes, vendedores, pagos, entregas y reseñas. 
+ngocyen99tb.lelouvincx.com
+
+Objetivos
+
+Importar y normalizar los CSV de Olist en SQLite.
+
+Exponer REST APIs para:
+
+Catálogo (productos/categorías),
+
+Ventas (órdenes/ítems/pagos),
+
+Operación (entregas/SLAs),
+
+Experiencia (reviews),
+
+Analytics (KPIs y rankings).
+
+Front en React + Vite + Redux Toolkit con:
+
+vista “Tienda demo” (catálogo y detalle),
+
+panel “Analytics” con filtros por fechas/estado/categoría/estado (UF).
+
+Mantener diseño escalable con dominios y arquitectura C4.
+
+2) Ventaja competitiva y valor añadido
+
+Dataset real y relacional: no es un CSV “plano”; permite trazabilidad de punta a punta (venta → pago → entrega → review). 
+ngocyen99tb.lelouvincx.com
+
+Analítica de logística: puedes medir “entregado vs estimado” usando order_delivered_customer_date y order_estimated_delivery_date. 
+ngocyen99tb.lelouvincx.com
+
+Marketplace-ready: Olist trae sellers, así que puedes mostrar métricas por vendedor (muy atractivo para un portfolio). 
+ngocyen99tb.lelouvincx.com
+
+Segmentación de clientes: trae customer_unique_id para agrupar compras del mismo cliente a lo largo del tiempo. 
+ngocyen99tb.lelouvincx.com
+
+3) Funcionalidades clave (basadas en Olist)
+Catálogo (read-only / demo)
+
+Listado de productos con categoría (PT + traducción EN)
+
+Filtros: categoría, rango de precio (derivado), “top vendidos”
+
+Detalle: dimensiones/peso/fotos_qty
+
+Olist no trae “nombre comercial” del producto, trae atributos (category, weight, etc.). 
+ngocyen99tb.lelouvincx.com
+
+Para UI: puedes mostrar product_id como SKU y la categoría como nombre visible.
+
+Ventas / Órdenes
+
+Listado de órdenes con estado y timestamps del ciclo de vida (compra, aprobación, despacho, entrega, estimado). 
+ngocyen99tb.lelouvincx.com
+
+Detalle de orden: ítems (price, freight_value) y vendedor por ítem. 
+ngocyen99tb.lelouvincx.com
+
+Pagos: múltiples pagos por orden (payment_sequential, payment_type, payment_value). 
+ngocyen99tb.lelouvincx.com
+
+Reviews / Satisfacción
+
+Score 1–5 + texto opcional + fecha. 
+ngocyen99tb.lelouvincx.com
+
+Geo / Distribución
+
+Clientes y sellers por estado/ciudad/ZIP prefix
+
+Mapa (opcional): geolocation tiene múltiples filas por ZIP (hay que agregar/deduplicar). 
+ngocyen99tb.lelouvincx.com
++1
+
+Analytics (KPIs)
+
+Ventas (GMV) por día/semana/mes
+
+Órdenes totales, ítems vendidos
+
+AOV (ticket promedio)
+
+Top categorías, top sellers, top productos
+
+Entregas: % entregadas tarde vs estimado, lead time promedio
+
+Reviews: score promedio por categoría/seller/tiempo
+
+Definiciones sugeridas (claras y consistentes)
+
+GMV: SUM(order_items.price) (sin flete) o SUM(price + freight_value) (con flete). Olist trae ambos a nivel ítem. 
+ngocyen99tb.lelouvincx.com
+
+Pagado: SUM(order_payments.payment_value) (ojo: puede haber split payments). 
+ngocyen99tb.lelouvincx.com
+
+4) LeanCanva (Lean Canvas)
+
+Problema
+
+No hay visibilidad integral (ventas + logística + satisfacción) sin herramientas externas.
+
+Segmentos
+
+Analistas eCommerce / operación logística / sellers en marketplaces.
+
+Propuesta de valor
+
+Dashboard que cruza ventas + entrega + reviews en un mismo modelo de datos.
+
+Solución
+
+React dashboard + Django APIs + dataset Olist importado.
+
+Canales
+
+Demo online, GitHub, portfolio, LinkedIn.
+
+Métricas clave
+
+GMV, órdenes, AOV, lateness rate, lead time, review score.
+
+Ventaja injusta
+
+Dataset real multi-tabla y arquitectura por dominios lista para crecer.
+
+5) Principales casos de uso
+
+Admin importa dataset (CSV → SQLite) y corre validaciones (nulos, duplicados, claves).
+
+Usuario navega catálogo (categorías traducidas, top vendidos).
+
+Analista filtra dashboard por rango de fecha + estado de orden.
+
+Analista ve “ventas por día” y detecta picos.
+
+Analista revisa “late deliveries” comparando entregado vs estimado. 
+ngocyen99tb.lelouvincx.com
+
+Analista explora “top sellers” por GMV e identifica sellers con peor score promedio.
+
+Export CSV de órdenes del período / top productos / performance logística.
+
+6) Diagrama entidad–relación (ERD) alineado a Olist
+erDiagram
+  CUSTOMERS ||--o{ ORDERS : places
+  ORDERS ||--|{ ORDER_ITEMS : contains
+  ORDERS ||--|{ ORDER_PAYMENTS : paid_by
+  ORDERS ||--o| ORDER_REVIEWS : reviewed_in
+  PRODUCTS ||--o{ ORDER_ITEMS : sold_in
+  SELLERS ||--o{ ORDER_ITEMS : fulfills
+  PRODUCT_CATEGORY_TRANSLATION ||--o{ PRODUCTS : translates
+  GEOLOCATION }o--o{ CUSTOMERS : locates_zip
+  GEOLOCATION }o--o{ SELLERS : locates_zip
+
+  CUSTOMERS {
+    uuid customer_id PK
+    uuid customer_unique_id
+    int customer_zip_code_prefix
+    string customer_city
+    string customer_state
+  }
+
+  ORDERS {
+    uuid order_id PK
+    uuid customer_id FK
+    string order_status
+    datetime order_purchase_timestamp
+    datetime order_approved_at
+    datetime order_delivered_carrier_date
+    datetime order_delivered_customer_date
+    datetime order_estimated_delivery_date
+  }
+
+  ORDER_ITEMS {
+    uuid order_id FK
+    int order_item_id PK
+    uuid product_id FK
+    uuid seller_id FK
+    datetime shipping_limit_date
+    decimal price
+    decimal freight_value
+  }
+
+  ORDER_PAYMENTS {
+    uuid order_id FK
+    int payment_sequential PK
+    string payment_type
+    int payment_installments
+    decimal payment_value
+  }
+
+  ORDER_REVIEWS {
+    uuid review_id PK
+    uuid order_id FK
+    int review_score
+    string review_comment_title
+    string review_comment_message
+    datetime review_creation_date
+    datetime review_answer_timestamp
+  }
+
+  PRODUCTS {
+    uuid product_id PK
+    string product_category_name
+    int product_name_lenght
+    int product_description_lenght
+    int product_photos_qty
+    int product_weight_g
+    int product_length_cm
+    int product_height_cm
+    int product_width_cm
+  }
+
+  SELLERS {
+    uuid seller_id PK
+    int seller_zip_code_prefix
+    string seller_city
+    string seller_state
+  }
+
+  PRODUCT_CATEGORY_TRANSLATION {
+    string product_category_name PK
+    string product_category_name_english
+  }
+
+  GEOLOCATION {
+    int geolocation_zip_code_prefix
+    decimal geolocation_lat
+    decimal geolocation_lng
+    string geolocation_city
+    string geolocation_state
+  }
+
+
+Basado en el esquema y relaciones documentadas (incluye payments multi-secuencial, items por seller, y customer_unique_id). 
+ngocyen99tb.lelouvincx.com
++1
+
+7) Arquitectura del sistema
+Backend (Django + DRF + SQLite)
+
+Enfoque recomendado (2 capas de datos):
+
+Staging Olist (raw): tablas “tal cual CSV” para trazabilidad y re-importación.
+
+Core dominio (opcional): vistas/materializaciones para simplificar métricas (ej. sales_daily_agg).
+
+Componentes:
+
+ingestion: comandos manage.py import_olist_*
+
+analytics: endpoints agregados (KPIs)
+
+catalog: productos/categorías (con traducción)
+
+sales: orders/items/payments
+
+reviews: order_reviews
+
+geo: geolocation + agregación por ZIP
+
+Frontend (React + Vite + Redux Toolkit)
+
+Rutas:
+
+/catalog
+
+/orders (listado analítico / admin)
+
+/analytics (dashboard)
+
+Redux slices:
+
+filtersSlice (fechas, estados, categoría, seller, estado BR)
+
+kpisSlice
+
+timeseriesSlice
+
+rankingsSlice (top products/sellers/categories)
+
+logisticsSlice (late rate, lead time)
+
+reviewsSlice (scores)
+
+8) Modelo C4 para arquitectura
+C1 — Contexto
+flowchart LR
+  Analyst[Analista/Admin] --> SPA[React SPA (Vite)]
+  SPA --> API[Django REST API]
+  API --> DB[(SQLite: Olist + agregados)]
+
+C2 — Contenedores
+flowchart TB
+  subgraph Browser
+    UI[React + Redux Toolkit]
+  end
+  subgraph Server
+    DRF[Django REST Framework]
+    ETL[Management Commands: Import Olist]
+  end
+  UI -->|JSON/HTTPS| DRF
+  ETL --> DB[(SQLite)]
+  DRF --> DB
+
+C3 — Componentes (Backend)
+flowchart TB
+  Controllers[ViewSets/Endpoints]
+  Serializers[Serializers]
+  Services[Analytics Services]
+  Selectors[SQL/ORM Selectors]
+  Models[Models: orders/items/payments/...]
+  DB[(SQLite)]
+
+  Controllers --> Serializers
+  Controllers --> Services
+  Services --> Selectors
+  Selectors --> Models
+  Models --> DB
+
+9) User stories (alineadas a Olist)
+Admin / Data Engineer
+
+Como admin, quiero importar los CSV de Olist a SQLite para inicializar la base.
+
+Como admin, quiero ejecutar validaciones (claves, nulos, duplicados) y ver un reporte de calidad.
+
+Analista
+
+Como analista, quiero ver GMV y órdenes por rango de fechas.
+
+Como analista, quiero ver top sellers (porque Olist trae sellers por ítem). 
+ngocyen99tb.lelouvincx.com
+
+Como analista, quiero medir entregas tardías comparando estimado vs entregado. 
+ngocyen99tb.lelouvincx.com
+
+Como analista, quiero ver review_score promedio por categoría y seller. 
+ngocyen99tb.lelouvincx.com
+
+Como analista, quiero exportar CSV del período filtrado.
+
+Usuario (demo)
+
+Como usuario, quiero explorar productos por categoría (con traducción PT→EN). 
+ngocyen99tb.lelouvincx.com
+
+10) Tabla de prioridades (MoSCoW)
+Ítem	Descripción	Prioridad
+Import Olist a SQLite	ETL por comandos + tablas staging	Must
+APIs base de lectura	products, orders, order_items, payments, reviews	Must
+Dashboard KPIs	GMV, órdenes, AOV, ítems	Must
+Series temporales	ventas por día/mes	Must
+Top rankings	productos/categorías/sellers	Should
+Logística	late rate + lead time	Should
+Reviews analytics	score promedio + distribución	Should
+Export CSV	endpoints + botón front	Should
+Mapas geo	agregación zip → coords	Could
+Agregados materializados	tabla daily aggregates	Could
+11) Estructura de carpetas por capa de dominio
+Backend (Django + DRF) — dominios + ingestion
+backend/
+  manage.py
+  config/
+    settings.py
+    urls.py
+  apps/
+    ingestion/
+      domain/
+        services.py              # reglas de import / validación
+      infrastructure/
+        loaders/
+          olist_csv_reader.py
+          mappers.py             # raw -> models
+        reports.py               # quality report
+      api/                       # opcional: endpoints para estado de importación
+      management/
+        commands/
+          import_olist.py        # comando principal
+      tests/
+
+    catalog/
+      infrastructure/
+        models.py                # Product, CategoryTranslation (raw Olist)
+        selectors.py
+      api/
+        serializers.py
+        views.py
+        urls.py
+
+    sales/
+      infrastructure/
+        models.py                # Order, OrderItem, Payment (raw Olist)
+        selectors.py
+      domain/
+        services.py              # helpers (totales, definiciones GMV)
+      api/
+        serializers.py
+        views.py
+        urls.py
+
+    reviews/
+      infrastructure/
+        models.py                # OrderReview
+        selectors.py
+      api/
+        serializers.py
+        views.py
+        urls.py
+
+    geo/
+      infrastructure/
+        models.py                # Geolocation, Customer/Seller location helpers
+        selectors.py
+      domain/
+        services.py              # dedupe/avg coords por zip
+      api/
+        views.py
+        urls.py
+
+    analytics/
+      domain/
+        kpis.py                  # GMV, AOV, orders_count
+        logistics.py             # lateness/lead-time
+        rankings.py              # top sellers/products/categories
+      infrastructure/
+        selectors.py             # queries agregadas (ORM o SQL)
+      api/
+        serializers.py
+        views.py                 # /metrics/*
+        urls.py
+
+Frontend (React + Vite + Redux Toolkit) — por dominio
+frontend/
+  src/
+    app/
+      store.ts
+      router.tsx
+    shared/
+      api/client.ts
+      components/
+    domains/
+      filters/
+        model/filtersSlice.ts
+        ui/FiltersBar.tsx
+      catalog/
+        model/catalogSlice.ts
+        ui/CatalogPage.tsx
+        ui/ProductCard.tsx
+      analytics/
+        model/kpisSlice.ts
+        model/timeseriesSlice.ts
+        model/rankingsSlice.ts
+        model/logisticsSlice.ts
+        ui/AnalyticsDashboard.tsx
+        ui/KpiCards.tsx
+        ui/SalesChart.tsx
+        ui/TopSellersTable.tsx
+        ui/DeliveryPerformance.tsx
+      orders/
+        model/ordersSlice.ts
+        ui/OrdersPage.tsx
