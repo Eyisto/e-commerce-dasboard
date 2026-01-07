@@ -1,72 +1,81 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { AuthState, User, AsyncStatus } from '@/shared/types';
-import { USE_MOCK } from '@/shared/api/client';
+import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import type { AuthState, User } from '@/shared/types';
+import { apiClient } from '@/shared/api/client';
+
+type LoginPayload = {
+  email: string;
+  password: string;
+};
+
+type LoginResponse = {
+  access: string;
+  refresh?: string;
+  user?: {
+    id: number | string;
+    username?: string;
+    email?: string;
+  };
+};
+
+const storedToken = localStorage.getItem('accessToken');
+const storedUser = localStorage.getItem('authUser');
 
 const initialState: AuthState = {
-  token: localStorage.getItem('auth_token'),
-  user: localStorage.getItem('auth_user') ? JSON.parse(localStorage.getItem('auth_user')!) : null,
+  token: storedToken,
+  user: storedUser ? (JSON.parse(storedUser) as User) : null,
   status: 'idle',
   error: null,
 };
 
-// Login thunk
+const buildUser = (payload: LoginPayload, apiUser?: LoginResponse['user']): User => {
+  const username = apiUser?.username || payload.email.split('@')[0] || payload.email;
+  return {
+    id: String(apiUser?.id ?? payload.email),
+    email: apiUser?.email || payload.email,
+    name: username,
+    role: 'analyst',
+  };
+};
+
 export const login = createAsyncThunk(
   'auth/login',
-  async ({ email, password }: { email: string; password: string }, { rejectWithValue }) => {
+  async (payload: LoginPayload, { rejectWithValue }) => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      if (USE_MOCK) {
-        // Mock login - accept any credentials
-        const user: User = {
-          id: 'user_001',
-          email,
-          name: email.split('@')[0],
-          role: 'admin',
-        };
-        const token = 'mock_token_' + Date.now();
-        
-        return { user, token };
+      const response = await apiClient.post<LoginResponse>('/api/v1/auth/token/', payload);
+      const { access, refresh, user } = response.data;
+
+      if (refresh) {
+        localStorage.setItem('refreshToken', refresh);
       }
-      
-      // Real API call would go here
-      throw new Error('API not implemented');
-    } catch (error) {
-      return rejectWithValue((error as Error).message);
+      localStorage.setItem('accessToken', access);
+
+      const mappedUser = buildUser(payload, user);
+      localStorage.setItem('authUser', JSON.stringify(mappedUser));
+
+      return { token: access, user: mappedUser };
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.detail ||
+        error?.response?.data?.non_field_errors?.[0] ||
+        error?.response?.data?.[0] ||
+        'Login failed';
+      return rejectWithValue(message);
     }
   }
 );
-
-// Logout thunk
-export const logout = createAsyncThunk('auth/logout', async () => {
-  localStorage.removeItem('auth_token');
-  localStorage.removeItem('auth_user');
-  return null;
-});
 
 const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
-    setToken: (state, action: PayloadAction<string | null>) => {
-      state.token = action.payload;
-      if (action.payload) {
-        localStorage.setItem('auth_token', action.payload);
-      } else {
-        localStorage.removeItem('auth_token');
-      }
-    },
-    setUser: (state, action: PayloadAction<User | null>) => {
-      state.user = action.payload;
-      if (action.payload) {
-        localStorage.setItem('auth_user', JSON.stringify(action.payload));
-      } else {
-        localStorage.removeItem('auth_user');
-      }
-    },
-    clearError: (state) => {
+    logout(state) {
+      state.token = null;
+      state.user = null;
+      state.status = 'idle';
       state.error = null;
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('authUser');
     },
   },
   extraReducers: (builder) => {
@@ -79,20 +88,13 @@ const authSlice = createSlice({
         state.status = 'succeeded';
         state.token = action.payload.token;
         state.user = action.payload.user;
-        localStorage.setItem('auth_token', action.payload.token);
-        localStorage.setItem('auth_user', JSON.stringify(action.payload.user));
       })
       .addCase(login.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.payload as string;
-      })
-      .addCase(logout.fulfilled, (state) => {
-        state.token = null;
-        state.user = null;
-        state.status = 'idle';
+        state.error = (action.payload as string) || 'Login failed';
       });
   },
 });
 
-export const { setToken, setUser, clearError } = authSlice.actions;
+export const { logout } = authSlice.actions;
 export default authSlice.reducer;
