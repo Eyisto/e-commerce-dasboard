@@ -1,10 +1,12 @@
 from pathlib import Path
+import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "change-me-in-production"
-DEBUG = True
-ALLOWED_HOSTS = []
+# Read from environment variables with fallbacks for development
+SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
+DEBUG = os.environ.get("DEBUG", "True") == "True"
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(",") if os.environ.get("ALLOWED_HOSTS") else []
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -88,12 +90,18 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 20,
 }
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-]
+# Read CORS origins from environment variable
+cors_origins_env = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+if cors_origins_env:
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins_env.split(",")]
+else:
+    # Fallback for development
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:5173",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ]
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^http://\d+\.\d+\.\d+\.\d+:8080$",
+    r"^http://\\d+\\.\\d+\\.\\d+\\.\\d+:8080$",
 ]
